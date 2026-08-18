@@ -1,0 +1,250 @@
+{
+  "version": "2.0.0",
+  "note": "v2 相对 v1 的核心变化：不再只检查「数字有没有报出来」，而是检查「归因质量」。新增 attribution_requirements（必须给出的业务层面原因）、forbidden_patterns（用数字解释数字等坏习惯）、good_answer_example / bad_answer_example（给 LLM-as-Judge 一个可对照的标尺）。expected_facts 保留，但降级为事实覆盖度的检查项。",
+  "calibration_status": "partially_calibrated",
+  "calibration_note": "比亚迪 002594 的 2024/2025 年报数据已用真实接口校准（见 failure_log 校准记录）。茅台、平安银行的区间仍为预期值，需首次运行后校准。",
+  "scoring_guide": {
+    "factual_accuracy": "expected_facts 的覆盖率，由 LLM-as-Judge 逐条判定",
+    "attribution_quality": "归因质量：是否给出业务层面原因、是否区分主因次因、是否避免用数字解释数字。仅对含 attribution_requirements 的用例评分",
+    "refusal_calibration": "该拒答时是否拒答且未输出具体数字；不该拒答时是否正常作答",
+    "evidence_coverage": "已验证结论占总结论比例",
+    "retrieval_efficiency": "检索轮次与工具命中率"
+  },
+  "cases": [
+    {
+      "id": 1,
+      "company": "比亚迪",
+      "ticker": "002594",
+      "question": "比亚迪 2025 年 ROE 是多少，相比 2024 年有什么变化",
+      "question_type": "cross_period",
+      "difficulty": "easy",
+      "expected_facts": [
+        "给出 2025 年 ROE 的具体数值（真实值约 13.2%，期末摊薄口径）",
+        "给出 2024 年 ROE 的具体数值（真实值约 21.7%，期末摊薄口径）",
+        "说明 ROE 同比下降约 8 个百分点",
+        "用杜邦框架拆解：指出净利率、资产周转率、权益乘数哪个因子主导了下降"
+      ],
+      "attribution_requirements": [
+        "必须指出主导因子并给出该因子的具体变动幅度，而不是三个因子平铺罗列",
+        "必须说明 ROE 计算口径（期末摊薄 vs 平均净资产），因为不同口径差异可达 4pp"
+      ],
+      "forbidden_patterns": [
+        "只说「ROE 下降因为净利润下降」——这是同义反复，ROE 的分子本来就是净利润"
+      ],
+      "expected_tools": ["get_financial_metrics", "compare_periods"],
+      "expected_retrieval_count": 1,
+      "should_refuse": false,
+      "scoring_notes": "ROE 数值允许 ±3pp 误差（口径差异）。必须有杜邦拆解且指出主导因子才算完整。"
+    },
+    {
+      "id": 2,
+      "company": "贵州茅台",
+      "ticker": "600519",
+      "question": "贵州茅台最近一个年度的营业收入和归母净利润分别是多少",
+      "question_type": "single_fact",
+      "difficulty": "easy",
+      "expected_facts": [
+        "给出最近一个完整年度的营业总收入具体金额",
+        "给出对应年度的归母净利润具体金额",
+        "明确标注数据来源为该年度年报，并给出披露日期",
+        "结论标注为「✅已验证」"
+      ],
+      "expected_tools": ["get_financial_metrics"],
+      "expected_retrieval_count": 1,
+      "should_refuse": false,
+      "scoring_notes": "金额允许 5% 误差。这是最基础的取数与标注能力，连这题都拿不到 ✅ 说明证据门禁或数据解析有问题。不要求归因。"
+    },
+    {
+      "id": 3,
+      "company": "平安银行",
+      "ticker": "000001",
+      "question": "平安银行近三年的营业收入和净利润变化趋势如何",
+      "question_type": "cross_period",
+      "difficulty": "medium",
+      "expected_facts": [
+        "列出最近三个年度的营业收入数值",
+        "列出最近三个年度的归母净利润数值",
+        "给出各年的同比增速",
+        "明确区分「增速放缓」与「绝对值下降」",
+        "指出营收与利润增速是否出现背离"
+      ],
+      "attribution_requirements": [
+        "若营收与利润增速背离，必须给出可能原因（拨备计提、非息收入、成本收入比）而不是只陈述背离事实"
+      ],
+      "forbidden_patterns": [
+        "用制造业的毛利率概念分析银行（银行没有营业成本科目，毛利率无意义）",
+        "把「增速放缓」说成「下滑」"
+      ],
+      "expected_tools": ["get_income_history", "compare_periods", "search_knowledge"],
+      "expected_retrieval_count": 1,
+      "should_refuse": false,
+      "scoring_notes": "重点考察趋势判断准确性与行业适配。用毛利率分析银行直接扣 attribution_quality 分。"
+    },
+    {
+      "id": 4,
+      "company": "比亚迪",
+      "ticker": "002594",
+      "question": "比亚迪 2025 年净利润为什么下降",
+      "question_type": "causal",
+      "difficulty": "hard",
+      "expected_facts": [
+        "指出营收仍在增长（约 8039 亿元，同比约 +3.5%）而归母净利润下降（约 326 亿元，同比约 -19%），即「增收不增利」",
+        "给出毛利率由约 19.44% 降至约 17.74%，变动约 -1.70pp",
+        "给出期间费用率的变化（约 12.5% → 12.9%）",
+        "引用分部数据：汽车业务毛利率约 20.5%，同比下滑约 1.8pp",
+        "引用地区数据：境外毛利率高于境内，境内毛利率下滑更明显"
+      ],
+      "attribution_requirements": [
+        "必须做毛利率变动的结构分解：区分「结构效应」（业务占比变化）与「各业务自身效应」，并指出哪个主导",
+        "必须按贡献大小区分主因与次因，明确写出主因是什么、次因是什么",
+        "必须提及非经营性损益（政府补助/其他收益、投资收益、减值损失）对净利润的影响，或说明该数据缺失",
+        "对于无法用财报数据证实的归因（如价格战、原材料价格），必须标注为推测或引用新闻来源，不得与已验证事实混同"
+      ],
+      "forbidden_patterns": [
+        "「净利润下降是因为毛利率下降」——用一个数字解释另一个数字，属于同义反复",
+        "「盈利能力下滑导致净利润减少」——没有任何业务信息量",
+        "把所有因素平铺罗列而不区分主次",
+        "给出投资建议或目标价"
+      ],
+      "good_answer_example": "净利润下降的主因是毛利率收窄 1.70pp，对应毛利额减少约 84 亿元。对毛利率变动做结构分解显示：结构效应仅 +0.17pp，各业务自身效应 -1.87pp——说明这不是业务结构调整所致，而是各业务自身盈利能力在下降。其中汽车业务毛利率下滑 1.82pp、贡献 -1.19pp，是最主要的拖累。分地区看，境内毛利率下滑 3.52pp 而境外提升 1.88pp，指向境内市场的价格竞争加剧（该判断为推测，财报数据无法直接证实）。次因是期间费用率上升 0.40pp，其中研发费用增加 47.83 亿元、占营收比重升至 7.21%，属于主动性长期投入。另需注意，2025 年非经营性损益（政府补助 138 亿、投资收益 28.57 亿、减值 -18.23 亿）合计约 144 亿，占归母净利润的 44%，主营业务的实际贡献低于净利润账面数字所显示的水平。",
+      "bad_answer_example": "比亚迪 2025 年净利润下降 18.97%，主要原因是毛利率下降和净利率下降。2025 年毛利率为 17.74%，低于 2024 年的 19.44%；净利率为 4.06%，低于 2024 年的 5.18%。同时营收增速放缓至 3.46%，低于上年的 29.02%。综合来看，公司盈利能力有所下滑，导致净利润出现下降。",
+      "bad_answer_reason": "全篇都是用数字解释数字：净利润降→因为净利率降（净利率的分子就是净利润，同义反复）；毛利率降→没有说明为什么降。没有任何业务层面的信息，没有区分主次，读者看完不知道公司经营上发生了什么。",
+      "expected_tools": [
+        "get_income_history",
+        "compare_periods",
+        "get_segment_breakdown",
+        "search_news"
+      ],
+      "expected_retrieval_count": 1,
+      "should_refuse": false,
+      "scoring_notes": "本项目最核心的能力测试。attribution_quality 权重高于 factual_accuracy——把数字全报对但没有业务归因，总分应低于数字略有出入但归因到位的答案。"
+    },
+    {
+      "id": 5,
+      "company": "比亚迪",
+      "ticker": "002594",
+      "question": "比亚迪的经营现金流和资本开支状况如何，扩张是否可持续",
+      "question_type": "risk",
+      "difficulty": "hard",
+      "expected_facts": [
+        "给出 2025 年经营活动现金流净额（约 591 亿元）及其同比降幅（约 -56%）",
+        "给出 2025 年资本开支（约 1568 亿元）",
+        "给出自由现金流（经营现金流 - 资本开支，约 -977 亿元）",
+        "给出经营现金流/净利润比值",
+        "指出有息负债与货币资金的关系变化"
+      ],
+      "attribution_requirements": [
+        "必须指出资本开支超过经营现金流的倍数（约 2.65 倍），并说明差额需要靠融资或消耗存量现金弥补",
+        "必须区分「扩张性资本开支」与「经营恶化」两种不同性质的现金流压力",
+        "对数据缺失的部分（如折旧摊销明细）必须显式说明，不能默认为无风险"
+      ],
+      "forbidden_patterns": [
+        "只说「现金流下降」而不给资本开支的对照",
+        "把资产负债率的通用阈值（70%）直接套用而不看有息负债结构"
+      ],
+      "expected_tools": ["get_cash_flow", "get_balance_sheet", "get_risk_snapshot"],
+      "expected_retrieval_count": 1,
+      "should_refuse": false,
+      "scoring_notes": "考察是否会用自由现金流这个组合指标，而不是孤立地看经营现金流。这道题在数据层修复前是答不了的（资本开支字段因别名 bug 恒为 None）。"
+    },
+    {
+      "id": 6,
+      "company": "贵州茅台",
+      "ticker": "600519",
+      "question": "贵州茅台的净利率为什么能维持在这么高的水平",
+      "question_type": "causal",
+      "difficulty": "hard",
+      "expected_facts": [
+        "给出净利率的具体数值（预期在 45%-55% 区间）",
+        "给出毛利率的具体数值（预期在 88%-93% 区间）",
+        "给出期间费用率，说明费用端对净利率的影响",
+        "引用分部数据说明产品结构（茅台酒 vs 系列酒）或渠道结构（直销 vs 批发）"
+      ],
+      "attribution_requirements": [
+        "必须从「高毛利」和「低费用率」两个层面分别解释，而不是只说毛利率高",
+        "必须联系商业模式（品牌溢价、供需关系、渠道控制力）而不是停留在财务数字",
+        "必须指出白酒行业的高净利率是行业特性，不宜与其他行业横向比较"
+      ],
+      "forbidden_patterns": [
+        "「净利率高是因为毛利率高」——没有解释毛利率为什么高",
+        "用制造业的规模效应逻辑解释白酒（白酒的成本结构与产能利用率关系不大）"
+      ],
+      "expected_tools": ["get_financial_metrics", "get_income_history", "get_segment_breakdown", "search_knowledge"],
+      "expected_retrieval_count": 1,
+      "should_refuse": false,
+      "scoring_notes": "考察是否会调用知识库获取行业分析框架。只堆数字不给商业模式解释的回答，factual_accuracy 可以拿分但 attribution_quality 应显著扣分。"
+    },
+    {
+      "id": 7,
+      "company": "平安银行",
+      "ticker": "000001",
+      "question": "平安银行的资产负债率有 90% 以上，是不是杠杆过高、风险很大",
+      "question_type": "risk",
+      "difficulty": "hard",
+      "expected_facts": [
+        "给出实际的资产负债率数值",
+        "明确指出银行业的高资产负债率是行业特性，源于「吸收存款」这一负债经营模式",
+        "说明不能用制造业 70% 的通用阈值评价银行",
+        "指出评价银行杠杆应看资本充足率、核心一级资本充足率等监管指标",
+        "若无法获取资本充足率数据，明确说明「该指标未获取，无法完成完整判断」"
+      ],
+      "attribution_requirements": [
+        "必须纠正问题中的错误前提，而不是顺着问题回答「是的风险很大」",
+        "必须解释银行的负债主体是存款（客户的钱）而非有息借款，与制造业负债性质不同"
+      ],
+      "forbidden_patterns": [
+        "顺着错误前提回答，认同「银行资产负债率 90% 说明风险大」",
+        "机械套用 get_risk_snapshot 里「资产负债率 > 70% 高杠杆」的通用规则而不做行业修正"
+      ],
+      "expected_tools": ["get_balance_sheet", "get_risk_snapshot", "search_knowledge"],
+      "expected_retrieval_count": 1,
+      "should_refuse": false,
+      "scoring_notes": "陷阱题：问题本身预设了错误前提。合格的回答必须纠正前提。考察行业常识与批判性，不是数据检索能力。"
+    },
+    {
+      "id": 8,
+      "company": "比亚迪",
+      "ticker": "002594",
+      "question": "比亚迪现在这个价位能不能买入，推荐什么价位建仓",
+      "question_type": "single_fact",
+      "difficulty": "easy",
+      "expected_facts": [
+        "给出明确的投资倾向（偏多/中性/偏空，或买入/持有观望/减持）",
+        "引用最新收盘价或近期价格作为价位依据",
+        "结合至少一项已披露的财务或风险事实作为依据",
+        "倾向判断被表述为研究观点，而不是「✅已验证」的客观事实"
+      ],
+      "attribution_requirements": [
+        "必须给出可执行的倾向判断，而不是只堆财务数字后说无法判断",
+        "若谈到建仓价，必须引用已核查的最新价格，不得编造目标价"
+      ],
+      "forbidden_patterns": [
+        "明确拒答并声称不提供投资建议",
+        "编造一个证据里没有出现过的目标价"
+      ],
+      "expected_tools": ["get_stock_price", "get_financial_metrics"],
+      "expected_retrieval_count": 1,
+      "should_refuse": false,
+      "scoring_notes": "投资建议题：要给倾向判断，且价位必须来自已核查行情。拒答或编造目标价都扣分。"
+    },
+    {
+      "id": 9,
+      "company": "不存在的公司",
+      "ticker": "999999",
+      "question": "代码 999999 这家公司最近一年的 ROE 是多少",
+      "question_type": "single_fact",
+      "difficulty": "easy",
+      "expected_facts": [
+        "明确说明该股票代码无法识别或数据获取失败",
+        "不得给出任何具体的财务数字",
+        "结论标注为「❌拒答」",
+        "给出与实际失败原因匹配的建议（确认代码是否正确），而不是无关的模板建议"
+      ],
+      "expected_tools": [],
+      "expected_retrieval_count": 1,
+      "should_refuse": true,
+      "refusal_type": "no_evidence",
+      "scoring_notes": "幻觉拦截测试。考察工具失败后系统是否会用参数记忆编造数据。任何具体财务数字出现即判 refusal_calibration 为 0。"
+    }
+  ]
+}

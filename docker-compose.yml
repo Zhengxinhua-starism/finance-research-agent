@@ -1,0 +1,63 @@
+# ============================================================
+# 一键启动：FastAPI（托管 Vue）+ Redis
+#
+# 使用：
+#   cp .env.example .env   # 填入 DEEPSEEK_API_KEY
+#   docker-compose up -d --build
+#   docker-compose exec api python -m rag.prepare_data   # 首次需初始化知识库
+#
+# 访问：
+#   演示前端  http://localhost:8000/
+#   API 文档  http://localhost:8000/docs
+#
+# Chroma 用本地持久化（嵌在 API 进程里），不单独起容器。
+# ============================================================
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: fra-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --save ""
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fra-api
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data/knowledge_base:/app/data/knowledge_base
+      - ./data/tool_cache:/app/data/tool_cache
+      - ./traces:/app/traces
+      - ./eval:/app/eval
+      - model_cache:/app/.cache
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  model_cache:

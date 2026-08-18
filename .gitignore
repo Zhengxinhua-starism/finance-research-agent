@@ -1,0 +1,61 @@
+# ---- 密钥（绝对不能提交）----
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials.json
+
+# ---- 运行时产物 ----
+traces/
+data/knowledge_base/
+data/tool_cache/
+eval/results/*
+!eval/results/*.md
+*.log
+
+# ---- 模型缓存 ----
+.cache/
+models/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- 虚拟环境 ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- 本地编辑器 / Agent ----
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+
+# ---- 操作系统 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 前端 ----
+web/node_modules/
+web/dist/
+
+# ---- Gradio 历史缓存（已下线）----
+gradio_cached_examples/
+flagged/
